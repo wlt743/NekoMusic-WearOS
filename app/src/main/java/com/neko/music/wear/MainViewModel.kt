@@ -10,6 +10,7 @@ import androidx.media3.common.Player
 import com.neko.music.wear.data.FavoriteMusic
 import com.neko.music.wear.data.Music
 import com.neko.music.wear.data.PlaylistInfo
+import com.neko.music.wear.data.ClientIdentity
 import com.neko.music.wear.data.NekoApi
 import com.neko.music.wear.data.NonceClient
 import com.neko.music.wear.player.PlaybackService
@@ -83,6 +84,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
 
     init {
+        // 客户端身份：必须在任何受保护请求前完成初始化
+        ClientIdentity.init(app)
+
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _state.update { it.copy(playing = isPlaying) }
@@ -115,8 +119,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
-        // 预热 nonce 池：后台先换题 + 解 PoW，首次播放不用等
+        // 预热 nonce 池 + 实例注册：后台先跑完，首次播放不用等
         viewModelScope.launch { NonceClient.prefetch() }
+        viewModelScope.launch { ClientIdentity.warmUp() }
 
         _state.update {
             it.copy(

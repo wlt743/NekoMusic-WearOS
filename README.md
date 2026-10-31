@@ -101,6 +101,45 @@ ui/         HomeScreen / MenuScreen / DownloadsScreen / AccountScreens / PlayerS
 MainViewModel.kt   统一状态机：列表、播放、缓存、账号、收藏歌单
 ```
 
+## 客户端身份 v1（实例签名）
+
+后端要求受保护接口证明「哪个应用 + 哪个安装实例」在请求，由 `data/ClientIdentity.kt` 实现：
+
+1. 本机生成 EC P-256 密钥对，私钥 PKCS8 / 公钥 SPKI 存应用私有 `SharedPreferences`
+2. `GET /api/client/challenge?purpose=register` 取挑战 → 用私钥签名 → `POST /api/client/register`
+3. 服务端返回实例令牌（带过期时间），到期前自动 `/api/client/token` 续签
+4. 每个受保护请求附带 `X-Neko-Client-Id/Instance/Token/Timestamp/Signature`
+
+签名串（字段顺序固定）：
+
+```
+neko-client-v1
+<METHOD>
+<PATH>
+<RAW_QUERY>
+<client_id>
+<instance_id>
+<platform>
+<timestamp>
+<body_sha256_hex>
+<nonce>
+```
+
+### 平台标记（容易踩）
+
+| 位置 | 取值 |
+| --- | --- |
+| `X-Neko-Client` | `androidwatch+<版本>` |
+| `User-Agent` | `NekoMusic-AWatch/<版本>` |
+| 挑战 / 注册参数 `platform` | `androidwatch` |
+
+后端把 UA 分类成 `awatch`，与自报的 `androidwatch` 分别精确匹配。UA 写成
+`NekoMusic-android/...` 会被判成手机端而 401，写成 `NekoMusic-androidwatch/...` 会被判成非官方客户端而 403。
+
+客户端 ID 是后端登记的公开客户端 `nkc_pub_android_watch_prod`（无 secret）。
+注册时未附 Android Key Attestation 证书链，服务端会把可信等级降级为 `software`，
+仍以挑战签名验证实例私钥。
+
 ## 防重放（PoW + 一次性 nonce）
 
 后端对受保护接口要求一次性 `X-Neko-Nonce`，由 `data/NonceClient.kt` 统一管理：

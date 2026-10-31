@@ -177,28 +177,53 @@ object NekoApi {
         var lastError = "请求失败"
         repeat(3) {
             val nonce = if (needNonce) NonceClient.next(write = write) else null
+            // 签名必须覆盖 nonce，所以先取 nonce 再算身份头
+            val identity: Map<String, String> = if (nonce != null) {
+                val (path, query) = ClientIdentity.splitUrl(url)
+                ClientIdentity.headers(
+                    method = method.value,
+                    path = path,
+                    rawQuery = query,
+                    bodyHash = ClientIdentity.bodyHash(requestBody),
+                    nonce = nonce,
+                )
+            } else {
+                emptyMap()
+            }
             val response = client.request(url) {
                 this.method = method
                 if (nonce != null) header("X-Neko-Nonce", nonce)
+                identity.forEach { (name, value) -> header(name, value) }
                 if (authToken != null) header("Authorization", authToken)
                 if (requestBody != null) {
                     contentType(ContentType.Application.Json)
                     setBody(requestBody)
                 }
             }
+            val text = response.bodyAsText()
             when (response.status) {
                 HttpStatusCode.Conflict -> {
                     // 服务端判重放 / nonce 过期：只作废该方向的池，换新题重试
                     NonceClient.invalidate(write = write)
                     lastError = "nonce 被拒绝（409）"
                 }
+                HttpStatusCode.Unauthorized -> {
+                    // 实例令牌失效才重新注册；其它 401（例如用户令牌过期）直接交回上层
+                    if (needNonce && (text.contains("客户端身份") || text.contains("client.invalid"))) {
+                        ClientIdentity.invalidate()
+                        lastError = "客户端身份失效，正在重新注册"
+                    } else {
+                        return text
+                    }
+                }
                 HttpStatusCode.TooManyRequests -> {
                     // 限流时连着重试只会更糟，直接抛给上层提示用户
                     throw IOException("请求过于频繁（429），请稍后再试")
                 }
-                else -> return response.bodyAsText()
+                else -> return text
             }
         }
         throw IOException(lastError)
     }
 }
+
