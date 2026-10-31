@@ -140,7 +140,8 @@ object NekoApi {
                 }.getOrNull() ?: continue
 
                 val status = (obj["status"] as? JsonPrimitive)?.content ?: continue
-                android.util.Log.d("NekoQr", "status=$status payload=$payload")
+                // 只记状态，不记原始帧（里面带一次性 token）
+                android.util.Log.d("NekoQr", "status=$status")
                 val token = (obj["token"] as? JsonPrimitive)?.content
                 val user = (obj["user"] as? JsonObject)?.let {
                     runCatching { json.decodeFromJsonElement(UserData.serializer(), it) }.getOrNull()
@@ -172,9 +173,10 @@ object NekoApi {
             return client.request(url).bodyAsText()
         }
 
+        val write = method != HttpMethod.Get
         var lastError = "请求失败"
-        repeat(2) {
-            val nonce = if (needNonce) NonceClient.next(write = method != HttpMethod.Get) else null
+        repeat(3) {
+            val nonce = if (needNonce) NonceClient.next(write = write) else null
             val response = client.request(url) {
                 this.method = method
                 if (nonce != null) header("X-Neko-Nonce", nonce)
@@ -184,9 +186,18 @@ object NekoApi {
                     setBody(requestBody)
                 }
             }
-            if (response.status != HttpStatusCode.Conflict) return response.bodyAsText()
-            lastError = "nonce 被拒绝（409）"
-            NonceClient.invalidate()
+            when (response.status) {
+                HttpStatusCode.Conflict -> {
+                    // 服务端判重放 / nonce 过期：只作废该方向的池，换新题重试
+                    NonceClient.invalidate(write = write)
+                    lastError = "nonce 被拒绝（409）"
+                }
+                HttpStatusCode.TooManyRequests -> {
+                    // 限流时连着重试只会更糟，直接抛给上层提示用户
+                    throw IOException("请求过于频繁（429），请稍后再试")
+                }
+                else -> return response.bodyAsText()
+            }
         }
         throw IOException(lastError)
     }

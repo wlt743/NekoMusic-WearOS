@@ -101,6 +101,23 @@ ui/         HomeScreen / MenuScreen / DownloadsScreen / AccountScreens / PlayerS
 MainViewModel.kt   统一状态机：列表、播放、缓存、账号、收藏歌单
 ```
 
+## 防重放（PoW + 一次性 nonce）
+
+后端对受保护接口要求一次性 `X-Neko-Nonce`，由 `data/NonceClient.kt` 统一管理：
+
+1. `GET /api/replay/challenge?read=N&write=M` 换题，拿到 `challenge` / `seed` / `difficulty`
+2. 本地求 `SHA-256("<seed>:<counter>")` 前导零比特数 ≥ `difficulty` 的最小 counter
+3. `GET /api/replay/nonce?challenge=…&proof=…` 兑换一批 nonce，按读/写分池缓存
+4. 每个 nonce 只用于一次请求，取出即消耗，即使请求失败也不回池
+
+实现要点：
+
+- **读写分池**：GET 与其它 HTTP 方法在服务端是两个独立池，混用会直接 409
+- **单飞补货**：并发缺货时只换一次题、只解一次 PoW，其余协程等锁复用结果
+- **求解可控**：难度夹紧到 32 以内，20 秒超时，循环每 8192 次检查取消
+- **409 处理**：只作废对应方向的池并换题重试（最多 3 次）；**429** 不重试，直接提示用户
+- **启动预热**：`MainViewModel` 初始化时后台预取读池，首次播放不必等 PoW
+
 ## 已知问题
 
 - `MainViewModel` 承担了过多职责，后续计划拆成播放 / 缓存 / 账号 / 曲库四块

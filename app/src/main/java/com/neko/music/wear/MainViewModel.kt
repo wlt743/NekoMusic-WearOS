@@ -11,6 +11,7 @@ import com.neko.music.wear.data.FavoriteMusic
 import com.neko.music.wear.data.Music
 import com.neko.music.wear.data.PlaylistInfo
 import com.neko.music.wear.data.NekoApi
+import com.neko.music.wear.data.NonceClient
 import com.neko.music.wear.player.PlaybackService
 import com.neko.music.wear.player.PlayerManager
 import com.neko.music.wear.ui.LyricLine
@@ -113,6 +114,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 delay(500)
             }
         }
+
+        // 预热 nonce 池：后台先换题 + 解 PoW，首次播放不用等
+        viewModelScope.launch { NonceClient.prefetch() }
 
         _state.update {
             it.copy(
