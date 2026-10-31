@@ -14,7 +14,7 @@ package com.neko.music.wear.data
  */
 object ApiConfig {
     const val BASE = "https://music.nekocore.cn"
-    const val CLIENT_VERSION = "0.1.0"
+    const val CLIENT_VERSION = "0.2.0"
 
     /** 后端登记的公开客户端 ID（confidential=false，不带 secret）。 */
     const val CLIENT_ID = "nkc_pub_android_watch_prod"

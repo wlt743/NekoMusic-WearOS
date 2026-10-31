@@ -34,11 +34,12 @@ import com.neko.music.wear.ui.PlaylistsScreen
 import com.neko.music.wear.ui.ProfileScreen
 import com.neko.music.wear.ui.HomeScreen
 import com.neko.music.wear.ui.MenuScreen
+import com.neko.music.wear.ui.SnakeGame
 import com.neko.music.wear.ui.MiniPlayer
 import com.neko.music.wear.ui.NekoTheme
 import com.neko.music.wear.ui.PlayerScreen
 
-private enum class Screen { Home, Menu, Downloads, Player, Account, Login, Favorites, Playlists, PlaylistSongs }
+private enum class Screen { Home, Menu, Downloads, Player, Account, Login, Favorites, Playlists, PlaylistSongs, Egg }
 
 /** 每个覆盖层按返回时的上一级；null 表示回到首页。 */
 private fun parentOf(screen: Screen?): Screen? = when (screen) {
@@ -49,6 +50,7 @@ private fun parentOf(screen: Screen?): Screen? = when (screen) {
     Screen.Favorites -> Screen.Account
     Screen.Playlists -> Screen.Account
     Screen.PlaylistSongs -> Screen.Playlists
+    Screen.Egg -> Screen.Menu
     else -> null
 }
 
@@ -140,7 +142,10 @@ class MainActivity : ComponentActivity() {
                                 onBack = { overlay = null },
                                 onOpenDownloads = { overlay = Screen.Downloads },
                                 onOpenAccount = { overlay = Screen.Account },
+                                onOpenEgg = { overlay = Screen.Egg },
                             )
+
+                            Screen.Egg -> SnakeGame(onExit = { overlay = Screen.Menu })
 
                             Screen.Account -> ProfileScreen(
                                 state = state,

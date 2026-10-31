@@ -1,5 +1,8 @@
 package com.neko.music.wear.ui
 
+import android.content.Intent
+import com.neko.music.wear.BuildConfig
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +32,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.style.TextAlign
@@ -137,7 +143,12 @@ fun MenuScreen(
     onBack: () -> Unit,
     onOpenDownloads: () -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenEgg: () -> Unit,
 ) {
+    val context = LocalContext.current
+    // 彩蛋：连点版本号 7 下（间隔 800ms 内）进入游戏
+    var eggTaps by remember { mutableIntStateOf(0) }
+    var eggLastTap by remember { mutableLongStateOf(0L) }
     ScalingLazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 8.dp, top = 28.dp, end = 8.dp, bottom = 64.dp),
@@ -171,22 +182,57 @@ fun MenuScreen(
         item {
             MenuCard(
                 title = "版本",
-                subtitle = if (state.serverVersion.isBlank()) {
-                    "0.1.0"
+                subtitle = if (isNewerVersion(state.watchLatestVersion, BuildConfig.VERSION_NAME)) {
+                    "${BuildConfig.VERSION_NAME} · 有新版本 ${state.watchLatestVersion}"
                 } else {
-                    "0.1.0 · Android 端最新 ${state.serverVersion}"
+                    BuildConfig.VERSION_NAME
                 },
-                onClick = null,
+                onClick = {
+                    val now = System.currentTimeMillis()
+                    eggTaps = if (now - eggLastTap < 800L) eggTaps + 1 else 1
+                    eggLastTap = now
+                    if (eggTaps >= 7) {
+                        eggTaps = 0
+                        onOpenEgg()
+                    }
+                },
             )
         }
 
         item { MenuCard(title = "开发者", subtitle = "wlt743", onClick = null) }
 
-        item { MenuCard(title = "GitHub 仓库", subtitle = "待补充", onClick = null) }
+        item {
+            MenuCard(
+                title = "GitHub 仓库",
+                subtitle = REPO_LABEL,
+                onClick = {
+                    // 手表上没有浏览器的情况下静默失败，不影响其它操作
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(REPO_URL)))
+                    }
+                },
+            )
+        }
 
         item { TextButton(onClick = onBack) { Text("返回") } }
     }
 }
+
+/** 服务端版本比本地新才提示，等于或落后时不打扰。 */
+private fun isNewerVersion(remote: String, local: String): Boolean {
+    if (remote.isBlank()) return false
+    val r = remote.split(".").map { it.toIntOrNull() ?: 0 }
+    val l = local.split(".").map { it.toIntOrNull() ?: 0 }
+    for (i in 0 until maxOf(r.size, l.size)) {
+        val a = r.getOrElse(i) { 0 }
+        val b = l.getOrElse(i) { 0 }
+        if (a != b) return a > b
+    }
+    return false
+}
+
+private const val REPO_URL = "https://github.com/wlt743/NekoMusic-WearOS"
+private const val REPO_LABEL = "wlt743/NekoMusic-WearOS"
 
 @Composable
 private fun MenuCard(title: String, subtitle: String, onClick: (() -> Unit)?) {
